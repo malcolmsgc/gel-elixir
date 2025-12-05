@@ -220,7 +220,7 @@ defmodule Gel.Connection do
 
       other ->
         message = "unexpected message from socket received during ping: #{inspect(other)}"
-        {:disconect, Gel.InternalClientError.new(message), state}
+        {:disconnect, Gel.InternalClientError.new(message), state}
     after
       0 ->
         :ssl.setopts(state.socket, active: false)
@@ -1548,7 +1548,7 @@ defmodule Gel.Connection do
         "unexpected Gel message received during ping: #{inspect(message)}"
       )
 
-    {:disconect, exc, state}
+    {:disconnect, exc, state}
   end
 
   # if we haven't received state ID from Gel then pretend state is default
