@@ -184,21 +184,29 @@ defmodule Gel.Connection do
   @impl DBConnection
   def disconnect(%Gel.Error{type: Gel.ClientConnectionClosedError} = exc, %State{} = state) do
     send(state.pool_pid, {:disconnected, self(), exc})
-    :ssl.close(state.socket)
+    _ = :ssl.close(state.socket)
+    :ok
   end
 
   @impl DBConnection
   def disconnect(exc, %State{} = state) do
     send(state.pool_pid, {:disconnected, self(), exc})
 
-    with {:ok, _state} <- send_message(%Terminate{}, state) do
-      :ssl.close(state.socket)
-    end
+    _ =
+      with {:ok, _state} <- send_message(%Terminate{}, state) do
+        :ssl.close(state.socket)
+      end
+
+    :ok
   end
 
   @impl DBConnection
-  def ping(%State{socket: socket} = state) do
-    :ssl.setopts(state.socket, active: :once)
+  def ping(%State{} = state) do
+    do_ping(state.socket, state)
+  end
+
+  defp do_ping(socket, state) do
+    :ssl.setopts(socket, active: :once)
 
     receive do
       {:ssl_closed, ^socket} ->
@@ -216,7 +224,15 @@ defmodule Gel.Connection do
 
       {:ssl, ^socket, message_data} ->
         message = Protocol.decode_completed_message(message_data, state.protocol_version)
-        handle_ping_message(message, state)
+
+        case message do
+          %LogMessage{} ->
+            state = handle_log_message(message, state)
+            do_ping(socket, state)
+
+          _ ->
+            handle_ping_message(message, state)
+        end
 
       other ->
         message = "unexpected message from socket received during ping: #{inspect(other)}"
